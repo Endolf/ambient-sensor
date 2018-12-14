@@ -1,17 +1,3 @@
-/*
-  MKR1000 - MKR WiFi 1010 - MKR VIDOR 4000 WiFi RTC
-
-  This sketch asks NTP for the Linux epoch and sets the internal Arduino MKR1000's RTC accordingly.
-
-  created 08 Jan 2016
-  by Arturo Guadalupi <a.guadalupi@arduino.cc>
-
-  modified 26 Sept 2018
-
-  http://arduino.cc/en/Tutorial/WiFiRTC
-  This code is in the public domain.
-*/
-
 #include <WiFiNINA.h>
 #include <RTCZero.h>
 #include <DHT.h>
