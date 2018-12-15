@@ -17,6 +17,15 @@ const String deviceId = "test";
 unsigned long lastBasicLoopTime = 0, lastDhtLoopTime = 0;
 const int basicLoopTime = 10000, dhtLoopTime = 10000;
 
+struct Data {
+  float humidity;
+  float temperature;
+  float batteryVoltage;
+  float rssi;
+};
+
+Data data;
+
 void setup() {
 
   pinMode(LED_BUILTIN, OUTPUT);
@@ -38,13 +47,11 @@ void loop() {
     checkAndConnectToWifi();
     printDate();
     printTime();
-    printBatteryVoltage();
-    mqttClient.publish("Endolf/f/rssi", String(WiFi.RSSI()));
+    printBatteryVoltage(&data);
+    printTempAndHumdity(&data);
+    data.rssi = WiFi.RSSI();
+    sendData(data);
     lastBasicLoopTime = (currentLoopTime / basicLoopTime) * basicLoopTime;
-  }
-  if ((currentLoopTime - lastDhtLoopTime) >= dhtLoopTime || currentLoopTime < lastDhtLoopTime) {
-    printTempAndHumdity();
-    lastDhtLoopTime = (currentLoopTime / dhtLoopTime) * dhtLoopTime;
   }
   if(mqttClient.connected()) {
     mqttClient.loop();
@@ -162,7 +169,7 @@ void checkAndConnectToWifi() {
   }
 }
 
-void printBatteryVoltage() {
+void printBatteryVoltage(Data* data) {
   // read the input on analog pin 0:
   int sensorValue = analogRead(ADC_BATTERY);
   // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 4.3V):
@@ -170,10 +177,10 @@ void printBatteryVoltage() {
   // print out the value you read:
   Serial.print(voltage);
   Serial.println("V");
-  mqttClient.publish("Endolf/f/battery", String(voltage));
+  data->batteryVoltage = voltage;
 }
 
-void printTempAndHumdity() {
+void printTempAndHumdity(Data* data) {
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
   Serial.print("Humidity: ");
@@ -181,10 +188,20 @@ void printTempAndHumdity() {
   Serial.print(" %, Temp: ");
   Serial.print(temperature);
   Serial.println(" Celsius");
-  mqttClient.publish("Endolf/f/humidity", String(humidity));
-  mqttClient.publish("Endolf/f/temperature", String(temperature));
+  data->humidity = humidity;
+  data->temperature = temperature;
 }
 
 void messageReceived(String &topic, String &payload) {
   Serial.println("incoming: " + topic + " - " + payload);
+}
+
+void sendData(Data data) {
+  String message = "{\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"battery\":" + String(data.batteryVoltage) + "}";
+  Serial.println("Sending: " + message);
+  mqttClient.publish("Endolf/f/ambient-sensor.rssi", String(data.rssi));
+  mqttClient.publish("Endolf/f/ambient-sensor.humidity", String(data.humidity));
+  mqttClient.publish("Endolf/f/ambient-sensor.temperature", String(data.temperature));
+  mqttClient.publish("Endolf/f/ambient-sensor.batteryvoltage", String(data.batteryVoltage));
+//  mqttClient.publish("Endolf/f/ambient-sensor", "{\"value\":" + message + "}");
 }
