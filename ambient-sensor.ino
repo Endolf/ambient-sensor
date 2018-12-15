@@ -26,7 +26,7 @@ void setup() {
   rtc.begin();
   dht.begin();
 
-  mqttClient.begin("broker.shiftr.io", 8883, wifiClient);
+  mqttClient.begin("io.adafruit.com", 8883, wifiClient);
   mqttClient.onMessage(messageReceived);
 
   checkAndConnectToWifi();
@@ -39,7 +39,7 @@ void loop() {
     printDate();
     printTime();
     printBatteryVoltage();
-    mqttClient.publish("ambient-sensor/" + deviceId + "/rssi", String(WiFi.RSSI()));
+    mqttClient.publish("Endolf/f/rssi", String(WiFi.RSSI()));
     lastBasicLoopTime = (currentLoopTime / basicLoopTime) * basicLoopTime;
   }
   if ((currentLoopTime - lastDhtLoopTime) >= dhtLoopTime || currentLoopTime < lastDhtLoopTime) {
@@ -151,7 +151,7 @@ void checkAndConnectToWifi() {
 
   if(!mqttClient.connected()) {
     Serial.println("Connecting to mqtt");
-    if(!mqttClient.connect(deviceId.c_str(), mqttUser, mqttPass)) {    
+    if(!mqttClient.connect(deviceId.c_str(), IO_USERNAME, IO_KEY)) {    
       Serial.print("Failed to connect: ");
       Serial.print(mqttClient.lastError());
       Serial.print(", ");
@@ -170,7 +170,7 @@ void printBatteryVoltage() {
   // print out the value you read:
   Serial.print(voltage);
   Serial.println("V");
-  mqttClient.publish("ambient-sensor/" + deviceId + "/battery", String(voltage));
+  mqttClient.publish("Endolf/f/battery", String(voltage));
 }
 
 void printTempAndHumdity() {
@@ -181,8 +181,8 @@ void printTempAndHumdity() {
   Serial.print(" %, Temp: ");
   Serial.print(temperature);
   Serial.println(" Celsius");
-  mqttClient.publish("ambient-sensor/" + String(deviceId) + "/humidity", String(humidity));
-  mqttClient.publish("ambient-sensor/" + String(deviceId) + "/temperature", String(temperature));
+  mqttClient.publish("Endolf/f/humidity", String(humidity));
+  mqttClient.publish("Endolf/f/temperature", String(temperature));
 }
 
 void messageReceived(String &topic, String &payload) {
