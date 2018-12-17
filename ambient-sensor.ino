@@ -5,6 +5,7 @@
 #include <DHT.h>
 #include <PubSubClient.h>
 #include <avr/dtostrf.h>
+#include <stdlib.h>
 
 #include "arduino_secrets.h"
 
@@ -38,7 +39,7 @@ void setup() {
   rtc.begin();
   dht.begin();
 
-  mqttClient.setServer("io.adafruit.com", 8883);
+  mqttClient.setServer("broker.shiftr.io", 8883);
   mqttClient.setCallback(messageReceived);
 
   checkAndConnectToWifi();
@@ -163,7 +164,7 @@ void checkAndConnectToWifi() {
     Serial.println(mqttClient.state());
     Serial.println("Connecting to mqtt");
     mqttClient.disconnect();
-    if (!mqttClient.connect(deviceId.c_str(), IO_USERNAME, IO_KEY)) {
+    if (!mqttClient.connect(deviceId.c_str(), mqttUser, mqttPass)) {
       Serial.print("Failed to connect: ");
       Serial.print(mqttClient.state());
     }
@@ -202,15 +203,11 @@ void messageReceived(char* topic, byte* payload, unsigned int length) {
 }
 
 void sendData(Data data) {
-  char dataBuffer[8];
   String message = "{\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"battery\":" + String(data.batteryVoltage) + "}";
   Serial.println("Sending: " + message);
-  dtostrf(data.rssi, 0, 0, dataBuffer);
-  mqttClient.publish("Endolf/f/ambient-sensor.rssi", dataBuffer);
-  dtostrf(data.humidity, 0, 1, dataBuffer);
-  mqttClient.publish("Endolf/f/ambient-sensor.humidity", dataBuffer);
-  dtostrf(data.temperature, 0, 1, dataBuffer);
-  mqttClient.publish("Endolf/f/ambient-sensor.temperature", dataBuffer);
-  dtostrf(data.batteryVoltage, 0, 1, dataBuffer);
-  mqttClient.publish("Endolf/f/ambient-sensor.batteryvoltage", dataBuffer);
+  
+  mqttClient.publish(("ambient-sensor/" + deviceId + "/rssi").c_str(), String(data.rssi).c_str());
+  mqttClient.publish(("ambient-sensor/" + deviceId + "/humidity").c_str(), String(data.humidity).c_str());
+  mqttClient.publish(("ambient-sensor/" + deviceId + "/temperature").c_str(), String(data.temperature).c_str());
+  mqttClient.publish(("ambient-sensor/" + deviceId + "/batteryvoltage").c_str(), String(data.batteryVoltage).c_str());
 }
