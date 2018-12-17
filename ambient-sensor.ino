@@ -1,7 +1,10 @@
+#define MQTT_KEEPALIVE 5
+
 #include <WiFiNINA.h>
 #include <RTCZero.h>
 #include <DHT.h>
-#include <MQTT.h>
+#include <PubSubClient.h>
+#include <avr/dtostrf.h>
 
 #include "arduino_secrets.h"
 
@@ -10,7 +13,7 @@
 DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
 RTCZero rtc;
 WiFiSSLClient wifiClient;
-MQTTClient mqttClient;
+PubSubClient mqttClient(wifiClient);
 
 const String deviceId = "test";
 
@@ -35,14 +38,16 @@ void setup() {
   rtc.begin();
   dht.begin();
 
-  mqttClient.begin("io.adafruit.com", 8883, wifiClient);
-  mqttClient.onMessage(messageReceived);
+  mqttClient.setServer("io.adafruit.com", 8883);
+  mqttClient.setCallback(messageReceived);
 
   checkAndConnectToWifi();
 }
 
 void loop() {
   unsigned long currentLoopTime = millis();
+
+  digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED) && mqttClient.connected());
   if ((currentLoopTime - lastBasicLoopTime) >= basicLoopTime || currentLoopTime < lastBasicLoopTime) {
     checkAndConnectToWifi();
     printDate();
@@ -53,9 +58,7 @@ void loop() {
     sendData(data);
     lastBasicLoopTime = (currentLoopTime / basicLoopTime) * basicLoopTime;
   }
-  if(mqttClient.connected()) {
-    mqttClient.loop();
-  }
+  mqttClient.loop();
 }
 
 void printTime()
@@ -108,8 +111,6 @@ void print2digits(int number) {
 void checkAndConnectToWifi() {
   int status = WiFi.status();
 
-  digitalWrite(LED_BUILTIN, status == WL_CONNECTED);
-
   // check if the WiFi module works
   if (status == WL_NO_SHIELD) {
     Serial.println("WiFi shield not present");
@@ -131,19 +132,20 @@ void checkAndConnectToWifi() {
       status = WiFi.status();
       numberOfTries++;
     }
-    digitalWrite(LED_BUILTIN, status == WL_CONNECTED);
     // you're connected now, so print out the status:
     printWiFiStatus();
 
     unsigned long epoch;
     numberOfTries = 0;
     do {
+      Serial.println("Attempting to get NTP time");
       epoch = WiFi.getTime();
       numberOfTries++;
+      delay(1000);
     }
     while ((epoch == 0) && (numberOfTries < maxTries));
 
-    if (numberOfTries > maxTries) {
+    if (numberOfTries >= maxTries) {
       Serial.print("NTP unreachable!!");
       while (1);
     }
@@ -156,15 +158,14 @@ void checkAndConnectToWifi() {
     }
   }
 
-  if(!mqttClient.connected()) {
+  if (!mqttClient.connected()) {
+    Serial.print("MQTT not connected: ");
+    Serial.println(mqttClient.state());
     Serial.println("Connecting to mqtt");
-    if(!mqttClient.connect(deviceId.c_str(), IO_USERNAME, IO_KEY)) {    
+    mqttClient.disconnect();
+    if (!mqttClient.connect(deviceId.c_str(), IO_USERNAME, IO_KEY)) {
       Serial.print("Failed to connect: ");
-      Serial.print(mqttClient.lastError());
-      Serial.print(", ");
-      Serial.print(mqttClient.connected());
-      Serial.print(", ");
-      Serial.println(mqttClient.returnCode());
+      Serial.print(mqttClient.state());
     }
   }
 }
@@ -192,16 +193,24 @@ void printTempAndHumdity(Data* data) {
   data->temperature = temperature;
 }
 
-void messageReceived(String &topic, String &payload) {
-  Serial.println("incoming: " + topic + " - " + payload);
+void messageReceived(char* topic, byte* payload, unsigned int length) {
+  Serial.print("incoming: " + String(topic) + " - ");
+  for (int i = 0; i < length; i++) {
+    Serial.print((char)payload[i]);
+  }
+  Serial.println();
 }
 
 void sendData(Data data) {
+  char dataBuffer[8];
   String message = "{\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"battery\":" + String(data.batteryVoltage) + "}";
   Serial.println("Sending: " + message);
-  mqttClient.publish("Endolf/f/ambient-sensor.rssi", String(data.rssi));
-  mqttClient.publish("Endolf/f/ambient-sensor.humidity", String(data.humidity));
-  mqttClient.publish("Endolf/f/ambient-sensor.temperature", String(data.temperature));
-  mqttClient.publish("Endolf/f/ambient-sensor.batteryvoltage", String(data.batteryVoltage));
-//  mqttClient.publish("Endolf/f/ambient-sensor", "{\"value\":" + message + "}");
+  dtostrf(data.rssi, 0, 0, dataBuffer);
+  mqttClient.publish("Endolf/f/ambient-sensor.rssi", dataBuffer);
+  dtostrf(data.humidity, 0, 1, dataBuffer);
+  mqttClient.publish("Endolf/f/ambient-sensor.humidity", dataBuffer);
+  dtostrf(data.temperature, 0, 1, dataBuffer);
+  mqttClient.publish("Endolf/f/ambient-sensor.temperature", dataBuffer);
+  dtostrf(data.batteryVoltage, 0, 1, dataBuffer);
+  mqttClient.publish("Endolf/f/ambient-sensor.batteryvoltage", dataBuffer);
 }
