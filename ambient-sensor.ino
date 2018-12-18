@@ -16,7 +16,7 @@ RTCZero rtc;
 WiFiSSLClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
-const String deviceId = "test";
+const String deviceId = "testambientsensor";
 
 unsigned long lastBasicLoopTime = 0, lastDhtLoopTime = 0;
 const int basicLoopTime = 10000, dhtLoopTime = 10000;
@@ -39,7 +39,7 @@ void setup() {
   rtc.begin();
   dht.begin();
 
-  mqttClient.setServer("broker.shiftr.io", 8883);
+  mqttClient.setServer("computerbooth.tinamous.com", 8883);
   mqttClient.setCallback(messageReceived);
 
   checkAndConnectToWifi();
@@ -166,7 +166,7 @@ void checkAndConnectToWifi() {
     mqttClient.disconnect();
     if (!mqttClient.connect(deviceId.c_str(), mqttUser, mqttPass)) {
       Serial.print("Failed to connect: ");
-      Serial.print(mqttClient.state());
+      Serial.println(mqttClient.state());
     }
   }
 }
@@ -203,11 +203,16 @@ void messageReceived(char* topic, byte* payload, unsigned int length) {
 }
 
 void sendData(Data data) {
-  String message = "{\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"battery\":" + String(data.batteryVoltage) + "}";
-  Serial.println("Sending: " + message);
-  
-  mqttClient.publish(("ambient-sensor/" + deviceId + "/rssi").c_str(), String(data.rssi).c_str());
-  mqttClient.publish(("ambient-sensor/" + deviceId + "/humidity").c_str(), String(data.humidity).c_str());
-  mqttClient.publish(("ambient-sensor/" + deviceId + "/temperature").c_str(), String(data.temperature).c_str());
-  mqttClient.publish(("ambient-sensor/" + deviceId + "/batteryvoltage").c_str(), String(data.batteryVoltage).c_str());
+  if(mqttClient.connected()) {
+    String message = "{\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"batteryvoltage\":" + String(data.batteryVoltage) + "}";
+    Serial.println("Sending: " + message);
+
+    mqttClient.publish("/Tinamous/V1/Measurements/Json", message.c_str());
+//    mqttClient.publish(("ambient-sensor/" + deviceId + "/rssi").c_str(), String(data.rssi).c_str());
+//    mqttClient.publish(("ambient-sensor/" + deviceId + "/humidity").c_str(), String(data.humidity).c_str());
+//    mqttClient.publish(("ambient-sensor/" + deviceId + "/temperature").c_str(), String(data.temperature).c_str());
+//    mqttClient.publish(("ambient-sensor/" + deviceId + "/batteryvoltage").c_str(), String(data.batteryVoltage).c_str());
+  } else {
+    Serial.println("MQTT not connected, not sending data");
+  }
 }
