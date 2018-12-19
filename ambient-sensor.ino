@@ -26,9 +26,7 @@ struct Data {
   float temperature;
   float batteryVoltage;
   float rssi;
-};
-
-Data data;
+} data;
 
 void setup() {
 
@@ -148,7 +146,8 @@ void checkAndConnectToWifi() {
 
     if (numberOfTries >= maxTries) {
       Serial.print("NTP unreachable!!");
-      while (1);
+      //Try again in a bit...
+      WiFi.disconnect();
     }
     else {
       Serial.print("Epoch received: ");
@@ -159,7 +158,7 @@ void checkAndConnectToWifi() {
     }
   }
 
-  if (!mqttClient.connected()) {
+  if ((WiFi.status()== WL_CONNECTED) && !mqttClient.connected()) {
     Serial.print("MQTT not connected: ");
     Serial.println(mqttClient.state());
     Serial.println("Connecting to mqtt");
