@@ -18,8 +18,8 @@ PubSubClient mqttClient(wifiClient);
 
 const String deviceId = "testambientsensor";
 
-unsigned long lastBasicLoopTime = 0, lastDhtLoopTime = 0;
-const int basicLoopTime = 10000, dhtLoopTime = 10000;
+unsigned long nextRunTime = 0L, lastDataSent = 0;;
+const int basicLoopFrequency = 1000 * 60 * 10;
 
 struct Data {
   float humidity;
@@ -40,14 +40,13 @@ void setup() {
   mqttClient.setServer("computerbooth.tinamous.com", 8883);
   mqttClient.setCallback(messageReceived);
 
-  checkAndConnectToWifi();
 }
 
 void loop() {
   unsigned long currentLoopTime = millis();
 
-  digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED) && mqttClient.connected());
-  if ((currentLoopTime - lastBasicLoopTime) >= basicLoopTime || currentLoopTime < lastBasicLoopTime) {
+  digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED));
+  if (millis() >= nextRunTime) {
     checkAndConnectToWifi();
     printDate();
     printTime();
@@ -55,9 +54,20 @@ void loop() {
     printTempAndHumdity(&data);
     data.rssi = WiFi.RSSI();
     sendData(data);
-    lastBasicLoopTime = (currentLoopTime / basicLoopTime) * basicLoopTime;
+    nextRunTime += basicLoopFrequency;
+    Serial.print("Loop ran at ");
+    Serial.print(currentLoopTime);
+    Serial.print(" in ");
+    Serial.print(millis() - currentLoopTime);
+    Serial.println("ms");
   }
   mqttClient.loop();
+  if (((millis() - lastDataSent) > 10000) && (WiFi.status() == WL_CONNECTED)) {
+    Serial.print("Turning off WiFi: ");
+    WiFi.end();
+    Serial.println(WiFi.status());
+    digitalWrite(LED_BUILTIN, false);
+  }
 }
 
 void printTime()
@@ -109,6 +119,7 @@ void print2digits(int number) {
 
 void checkAndConnectToWifi() {
   int status = WiFi.status();
+  int numberOfTries = 0;
 
   // check if the WiFi module works
   if (status == WL_NO_SHIELD) {
@@ -119,46 +130,48 @@ void checkAndConnectToWifi() {
 
   // attempt to connect to WiFi network:
   while ( status != WL_CONNECTED) {
-    Serial.print("Attempting to connect to SSID: ");
-    Serial.println(ssid);
-    Serial.flush();
+    Serial.print("Attempting to connect to SSID ");
+    Serial.print(ssid);
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
     status = WiFi.begin(ssid, pass);
+    digitalWrite(LED_BUILTIN, true);
 
-    int numberOfTries = 0, maxTries = 10;
-    while ( (status != WL_CONNECTED) && (numberOfTries < maxTries)) {
+    numberOfTries = 0;
+    while ( (status != WL_CONNECTED) && (numberOfTries < 10)) {
+      Serial.print(".");
       delay(1000);
       status = WiFi.status();
       numberOfTries++;
     }
+    Serial.println();
     // you're connected now, so print out the status:
     printWiFiStatus();
-
-    unsigned long epoch;
-    numberOfTries = 0;
-    do {
-      Serial.println("Attempting to get NTP time");
-      epoch = WiFi.getTime();
-      numberOfTries++;
-      delay(1000);
-    }
-    while ((epoch == 0) && (numberOfTries < maxTries));
-
-    if (numberOfTries >= maxTries) {
-      Serial.print("NTP unreachable!!");
-      //Try again in a bit...
-      WiFi.disconnect();
-    }
-    else {
-      Serial.print("Epoch received: ");
-      Serial.println(epoch);
-      rtc.setEpoch(epoch);
-
-      Serial.println();
-    }
   }
 
-  if ((WiFi.status()== WL_CONNECTED) && !mqttClient.connected()) {
+  unsigned long epoch;
+  numberOfTries = 0;
+  Serial.print("Attempting to get NTP time");
+  do {
+    Serial.print(".");
+    epoch = WiFi.getTime();
+    numberOfTries++;
+    delay(1000);
+  }
+  while ((epoch == 0) && (numberOfTries < 30));
+  Serial.println();
+
+  if (epoch == 0) {
+    Serial.println("NTP unreachable!!");
+    //Try again in a bit...
+    //WiFi.disconnect();
+  }
+  else {
+    Serial.print("Epoch received: ");
+    Serial.println(epoch);
+    rtc.setEpoch(epoch);
+  }
+
+  if ((WiFi.status() == WL_CONNECTED) && !mqttClient.connected()) {
     Serial.print("MQTT not connected: ");
     Serial.println(mqttClient.state());
     Serial.println("Connecting to mqtt");
@@ -194,23 +207,26 @@ void printTempAndHumdity(Data* data) {
 }
 
 void messageReceived(char* topic, byte* payload, unsigned int length) {
+  lastDataSent = millis();
   Serial.print("incoming: " + String(topic) + " - ");
   for (int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
+    lastDataSent = millis();
   }
   Serial.println();
 }
 
 void sendData(Data data) {
-  if(mqttClient.connected()) {
+  if (mqttClient.connected()) {
     String message = "{\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"batteryvoltage\":" + String(data.batteryVoltage) + "}";
     Serial.println("Sending: " + message);
 
     mqttClient.publish("/Tinamous/V1/Measurements/Json", message.c_str());
-//    mqttClient.publish(("ambient-sensor/" + deviceId + "/rssi").c_str(), String(data.rssi).c_str());
-//    mqttClient.publish(("ambient-sensor/" + deviceId + "/humidity").c_str(), String(data.humidity).c_str());
-//    mqttClient.publish(("ambient-sensor/" + deviceId + "/temperature").c_str(), String(data.temperature).c_str());
-//    mqttClient.publish(("ambient-sensor/" + deviceId + "/batteryvoltage").c_str(), String(data.batteryVoltage).c_str());
+    //    mqttClient.publish(("ambient-sensor/" + deviceId + "/rssi").c_str(), String(data.rssi).c_str());
+    //    mqttClient.publish(("ambient-sensor/" + deviceId + "/humidity").c_str(), String(data.humidity).c_str());
+    //    mqttClient.publish(("ambient-sensor/" + deviceId + "/temperature").c_str(), String(data.temperature).c_str());
+    //    mqttClient.publish(("ambient-sensor/" + deviceId + "/batteryvoltage").c_str(), String(data.batteryVoltage).c_str());
+    lastDataSent = millis();
   } else {
     Serial.println("MQTT not connected, not sending data");
   }
