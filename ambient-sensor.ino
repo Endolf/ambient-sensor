@@ -18,8 +18,9 @@ PubSubClient mqttClient(wifiClient);
 
 const String deviceId = "testambientsensor";
 
-unsigned long nextRunTime = 0L, lastDataSent = 0;;
-const int basicLoopFrequency = 1000 * 60 * 10;
+unsigned long nextSampleTime = 0L, lastDataSent = 0L, nextSendTime = 0L;
+const int dataSendFrequency = 1000 * 60 * 1, sampleFrequency=10000;
+const float dataSmoothingRatio = 0.7;
 
 struct Data {
   float humidity;
@@ -46,16 +47,25 @@ void loop() {
   unsigned long currentLoopTime = millis();
 
   digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED));
-  if (millis() >= nextRunTime) {
+  if (currentLoopTime >= nextSendTime) {
     checkAndConnectToWifi();
+    sendData(data);
+    nextSendTime += dataSendFrequency;
+    Serial.print("Data loop ran at ");
+    Serial.print(currentLoopTime);
+    Serial.print(" in ");
+    Serial.print(millis() - currentLoopTime);
+    Serial.println("ms");
+  }
+  if (currentLoopTime >= nextSampleTime) {
     printDate();
     printTime();
     printBatteryVoltage(&data);
     printTempAndHumdity(&data);
     data.rssi = WiFi.RSSI();
-    sendData(data);
-    nextRunTime += basicLoopFrequency;
-    Serial.print("Loop ran at ");
+    
+    nextSampleTime += sampleFrequency;
+    Serial.print("Sample loop ran at ");
     Serial.print(currentLoopTime);
     Serial.print(" in ");
     Serial.print(millis() - currentLoopTime);
