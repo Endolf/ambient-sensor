@@ -18,8 +18,7 @@ PubSubClient mqttClient(wifiClient);
 
 const String deviceId = "testambientsensor";
 
-unsigned long nextSampleTime = 0L, lastDataSent = 0L, nextSendTime = 0L;
-const int dataSendFrequency = 1000 * 60 * 1, sampleFrequency=10000;
+const int dataSendFrequency = 1000 * 60 * 10, sampleFrequency=10000;
 const float dataSmoothingRatio = 0.7;
 
 struct Data {
@@ -27,7 +26,9 @@ struct Data {
   float temperature;
   float batteryVoltage;
   float rssi;
-} data;
+} data,smoothedData;
+
+unsigned long nextSampleTime = 0L, lastDataSent = 0L, nextSendTime = dataSendFrequency;
 
 void setup() {
 
@@ -47,25 +48,41 @@ void loop() {
   unsigned long currentLoopTime = millis();
 
   digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED));
-  if (currentLoopTime >= nextSendTime) {
-    checkAndConnectToWifi();
-    sendData(data);
-    nextSendTime += dataSendFrequency;
-    Serial.print("Data loop ran at ");
+  if (currentLoopTime >= nextSampleTime) {
+    printDate();
+    printTime();
+    digitalWrite(LED_BUILTIN, true);
+    sampleBatteryVoltage(&data);
+    sampleTempAndHumdity(&data);
+
+    if(WiFi.status()==WL_CONNECTED) {
+      data.rssi = WiFi.RSSI();
+    }
+
+    smoothedData.rssi = smoothedData.rssi==0?data.rssi:(data.rssi * dataSmoothingRatio) + (smoothedData.rssi * (1-dataSmoothingRatio));
+    smoothedData.humidity = smoothedData.humidity==0?data.humidity:(data.humidity * dataSmoothingRatio) + (smoothedData.humidity * (1-dataSmoothingRatio));
+    smoothedData.temperature = smoothedData.temperature==0?data.temperature:(data.temperature * dataSmoothingRatio) + (smoothedData.temperature * (1-dataSmoothingRatio));
+    smoothedData.batteryVoltage = smoothedData.batteryVoltage==0?data.batteryVoltage:(data.batteryVoltage * dataSmoothingRatio) + (smoothedData.batteryVoltage * (1-dataSmoothingRatio));
+    digitalWrite(LED_BUILTIN, WiFi.status()==WL_CONNECTED);
+    Serial.println("data: {\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"batteryvoltage\":" + String(data.batteryVoltage) + "}");
+    Serial.println("smoothedData: {\"rssi\":" + String(smoothedData.rssi) + ",\"humidity\":" + String(smoothedData.humidity) + ",\"temperature\":" + String(smoothedData.temperature) + ",\"batteryvoltage\":" + String(smoothedData.batteryVoltage) + "}");
+
+    while(nextSampleTime<=currentLoopTime) nextSampleTime+=sampleFrequency;
+    Serial.print("Sample loop ran at ");
     Serial.print(currentLoopTime);
     Serial.print(" in ");
     Serial.print(millis() - currentLoopTime);
     Serial.println("ms");
   }
-  if (currentLoopTime >= nextSampleTime) {
-    printDate();
-    printTime();
-    printBatteryVoltage(&data);
-    printTempAndHumdity(&data);
-    data.rssi = WiFi.RSSI();
-    
-    nextSampleTime += sampleFrequency;
-    Serial.print("Sample loop ran at ");
+  if (currentLoopTime >= nextSendTime) {
+    checkAndConnectToWifi();
+    if(smoothedData.rssi==0) {
+      //Force override of RSSI data
+      smoothedData.rssi = WiFi.RSSI();
+    }
+    sendData(smoothedData);
+    while(nextSendTime<=currentLoopTime) nextSendTime+=dataSendFrequency;
+    Serial.print("Data loop ran at ");
     Serial.print(currentLoopTime);
     Serial.print(" in ");
     Serial.print(millis() - currentLoopTime);
@@ -193,25 +210,17 @@ void checkAndConnectToWifi() {
   }
 }
 
-void printBatteryVoltage(Data* data) {
+void sampleBatteryVoltage(Data* data) {
   // read the input on analog pin 0:
   int sensorValue = analogRead(ADC_BATTERY);
   // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 4.3V):
   float voltage = sensorValue * (4.3 / 1023.0);
-  // print out the value you read:
-  Serial.print(voltage);
-  Serial.println("V");
   data->batteryVoltage = voltage;
 }
 
-void printTempAndHumdity(Data* data) {
+void sampleTempAndHumdity(Data* data) {
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
-  Serial.print("Humidity: ");
-  Serial.print(humidity);
-  Serial.print(" %, Temp: ");
-  Serial.print(temperature);
-  Serial.println(" Celsius");
   data->humidity = humidity;
   data->temperature = temperature;
 }
