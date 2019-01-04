@@ -38,8 +38,6 @@
 #endif
 PubSubClient mqttClient(wifiClient);
 
-const String deviceId = "testambientsensor";
-
 const int dataSendFrequency = 1000 * 60 * 10, sampleFrequency=10000;
 const float dataSmoothingRatio = 0.7;
 
