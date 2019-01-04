@@ -1,10 +1,11 @@
 #define MQTT_KEEPALIVE 5
 
 #include <WiFiNINA.h>
-#include <RTCZero.h>
+#ifdef USE_RTCZero
+  #include <RTCZero.h>
+#endif
 #include <DHT.h>
 #include <PubSubClient.h>
-#include <avr/dtostrf.h>
 #include <stdlib.h>
 
 #include "arduino_secrets.h"
@@ -12,7 +13,9 @@
 #define DHTPIN 7     // what pin we're connected to
 #define DHTTYPE DHT22   // DHT 22  (AM2302)
 DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
-RTCZero rtc;
+#ifdef USE_RTCZero
+  RTCZero rtc;
+#endif
 WiFiSSLClient wifiClient;
 PubSubClient mqttClient(wifiClient);
 
@@ -32,11 +35,15 @@ unsigned long nextSampleTime = 0L, lastDataSent = 0L, nextSendTime = dataSendFre
 
 void setup() {
 
+#ifdef USE_BUILT_IN_LED
   pinMode(LED_BUILTIN, OUTPUT);
+#endif
 
   Serial.begin(115200);
 
+#ifdef USE_RTCZero
   rtc.begin();
+#endif
   dht.begin();
 
   mqttClient.setServer("computerbooth.tinamous.com", 8883);
@@ -47,11 +54,15 @@ void setup() {
 void loop() {
   unsigned long currentLoopTime = millis();
 
+#ifdef USE_BUILT_IN_LED
   digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED));
+#endif
   if (currentLoopTime >= nextSampleTime) {
     printDate();
     printTime();
+#ifdef USE_BUILT_IN_LED
     digitalWrite(LED_BUILTIN, true);
+#endif
     sampleBatteryVoltage(&data);
     sampleTempAndHumdity(&data);
 
@@ -63,7 +74,9 @@ void loop() {
     smoothedData.humidity = smoothedData.humidity==0?data.humidity:(data.humidity * dataSmoothingRatio) + (smoothedData.humidity * (1-dataSmoothingRatio));
     smoothedData.temperature = smoothedData.temperature==0?data.temperature:(data.temperature * dataSmoothingRatio) + (smoothedData.temperature * (1-dataSmoothingRatio));
     smoothedData.batteryVoltage = smoothedData.batteryVoltage==0?data.batteryVoltage:(data.batteryVoltage * dataSmoothingRatio) + (smoothedData.batteryVoltage * (1-dataSmoothingRatio));
+#ifdef USE_BUILT_IN_LED
     digitalWrite(LED_BUILTIN, WiFi.status()==WL_CONNECTED);
+#endif
     Serial.println("data: {\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"batteryvoltage\":" + String(data.batteryVoltage) + "}");
     Serial.println("smoothedData: {\"rssi\":" + String(smoothedData.rssi) + ",\"humidity\":" + String(smoothedData.humidity) + ",\"temperature\":" + String(smoothedData.temperature) + ",\"batteryvoltage\":" + String(smoothedData.batteryVoltage) + "}");
 
@@ -93,22 +106,30 @@ void loop() {
     Serial.print("Turning off WiFi: ");
     WiFi.end();
     Serial.println(WiFi.status());
+#ifdef USE_BUILT_IN_LED
     digitalWrite(LED_BUILTIN, false);
+#endif
   }
 }
 
 void printTime()
 {
+#ifdef USE_RTCZero
   print2digits(rtc.getHours());
   Serial.print(":");
   print2digits(rtc.getMinutes());
   Serial.print(":");
   print2digits(rtc.getSeconds());
   Serial.println(" UTC");
+#else
+  Serial.print("No RTC: ");
+  Serial.println(millis());
+#endif
 }
 
 void printDate()
 {
+#ifdef USE_RTCZero
   Serial.print(rtc.getDay());
   Serial.print("/");
   Serial.print(rtc.getMonth());
@@ -116,6 +137,7 @@ void printDate()
   Serial.print(rtc.getYear());
 
   Serial.print(" ");
+#endif
 }
 
 void printWiFiStatus() {
@@ -161,7 +183,9 @@ void checkAndConnectToWifi() {
     Serial.print(ssid);
     // Connect to WPA/WPA2 network. Change this line if using open or WEP network:
     status = WiFi.begin(ssid, pass);
+#ifdef USE_BUILT_IN_LED
     digitalWrite(LED_BUILTIN, true);
+#endif
 
     numberOfTries = 0;
     while ( (status != WL_CONNECTED) && (numberOfTries < 10)) {
@@ -195,7 +219,9 @@ void checkAndConnectToWifi() {
   else {
     Serial.print("Epoch received: ");
     Serial.println(epoch);
+#ifdef USE_RTCZero
     rtc.setEpoch(epoch);
+#endif
   }
 
   if ((WiFi.status() == WL_CONNECTED) && !mqttClient.connected()) {
@@ -211,11 +237,13 @@ void checkAndConnectToWifi() {
 }
 
 void sampleBatteryVoltage(Data* data) {
+#ifdef USE_BATTERY_VOLTAGE
   // read the input on analog pin 0:
   int sensorValue = analogRead(ADC_BATTERY);
   // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 4.3V):
   float voltage = sensorValue * (4.3 / 1023.0);
   data->batteryVoltage = voltage;
+#endif
 }
 
 void sampleTempAndHumdity(Data* data) {
@@ -228,7 +256,7 @@ void sampleTempAndHumdity(Data* data) {
 void messageReceived(char* topic, byte* payload, unsigned int length) {
   lastDataSent = millis();
   Serial.print("incoming: " + String(topic) + " - ");
-  for (int i = 0; i < length; i++) {
+  for (unsigned int i = 0; i < length; i++) {
     Serial.print((char)payload[i]);
     lastDataSent = millis();
   }
@@ -237,7 +265,13 @@ void messageReceived(char* topic, byte* payload, unsigned int length) {
 
 void sendData(Data data) {
   if (mqttClient.connected()) {
-    String message = "{\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"batteryvoltage\":" + String(data.batteryVoltage) + "}";
+    String message = "{\"rssi\":" + String(data.rssi)
+	+ ",\"humidity\":" + String(data.humidity)
+	+ ",\"temperature\":" + String(data.temperature)
+#ifdef USE_BATTERY_VOLTAGE
+	+ ",\"batteryvoltage\":" + String(data.batteryVoltage)
+#endif
+	+ "}";
     Serial.println("Sending: " + message);
 
     mqttClient.publish("/Tinamous/V1/Measurements/Json", message.c_str());
