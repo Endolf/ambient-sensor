@@ -1,22 +1,41 @@
 #define MQTT_KEEPALIVE 5
 
-#include <WiFiNINA.h>
+#ifdef USE_WIFI_NINA
+  #include <WiFiNINA.h>
+#else
+  #include <WiFi.h>
+  #include <WiFiClientSecure.h>
+#endif
 #ifdef USE_RTCZero
   #include <RTCZero.h>
 #endif
-#include <DHT.h>
+#ifdef USE_ESP32_DHT
+  #include <DHTesp.h>
+#else
+  #include <DHT.h>
+#endif
 #include <PubSubClient.h>
 #include <stdlib.h>
 
 #include "arduino_secrets.h"
 
-#define DHTPIN 7     // what pin we're connected to
-#define DHTTYPE DHT22   // DHT 22  (AM2302)
-DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
+// what pin we're connected to
+#define DHTPIN 23
+#ifdef USE_ESP32_DHT
+  DHTesp dht;
+#else
+  #define DHTTYPE DHT22   // DHT 22  (AM2302)
+  DHT dht(DHTPIN, DHTTYPE); //// Initialize DHT sensor for normal 16mhz Arduino
+#endif
 #ifdef USE_RTCZero
   RTCZero rtc;
 #endif
-WiFiSSLClient wifiClient;
+
+#ifdef USE_WIFI_NINA
+  WiFiSSLClient wifiClient;
+#else
+  WiFiClientSecure wifiClient;
+#endif
 PubSubClient mqttClient(wifiClient);
 
 const String deviceId = "testambientsensor";
@@ -44,7 +63,11 @@ void setup() {
 #ifdef USE_RTCZero
   rtc.begin();
 #endif
+#ifdef USE_ESP32_DHT
+  dht.setup(DHTPIN, DHTesp::DHT22);
+#else
   dht.begin();
+#endif
 
   mqttClient.setServer("computerbooth.tinamous.com", 8883);
   mqttClient.setCallback(messageReceived);
@@ -104,7 +127,12 @@ void loop() {
   mqttClient.loop();
   if (((millis() - lastDataSent) > 10000) && (WiFi.status() == WL_CONNECTED)) {
     Serial.print("Turning off WiFi: ");
+#ifdef USE_WIFI_NINA
     WiFi.end();
+#else
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+#endif
     Serial.println(WiFi.status());
 #ifdef USE_BUILT_IN_LED
     digitalWrite(LED_BUILTIN, false);
@@ -141,8 +169,10 @@ void printDate()
 }
 
 void printWiFiStatus() {
+#ifdef USE_WIFI_NINA
   Serial.print("Firmware version: ");
   Serial.println(WiFi.firmwareVersion());
+#endif
   // print the SSID of the network you're attached to:
   Serial.print("SSID: ");
   Serial.println(WiFi.SSID());
@@ -170,12 +200,14 @@ void checkAndConnectToWifi() {
   int status = WiFi.status();
   int numberOfTries = 0;
 
+#ifdef USE_WIFI_NINA
   // check if the WiFi module works
   if (status == WL_NO_SHIELD) {
     Serial.println("WiFi shield not present");
     // don't continue:
     while (true);
   }
+#endif
 
   // attempt to connect to WiFi network:
   while ( status != WL_CONNECTED) {
@@ -199,6 +231,7 @@ void checkAndConnectToWifi() {
     printWiFiStatus();
   }
 
+#ifdef USE_WIFI_NINA
   unsigned long epoch;
   numberOfTries = 0;
   Serial.print("Attempting to get NTP time");
@@ -223,6 +256,7 @@ void checkAndConnectToWifi() {
     rtc.setEpoch(epoch);
 #endif
   }
+#endif
 
   if ((WiFi.status() == WL_CONNECTED) && !mqttClient.connected()) {
     Serial.print("MQTT not connected: ");
@@ -247,8 +281,13 @@ void sampleBatteryVoltage(Data* data) {
 }
 
 void sampleTempAndHumdity(Data* data) {
+#ifdef USE_ESP32_DHT
+  float humidity = dht.getHumidity();
+  float temperature = dht.getTemperature();
+#else
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
+#endif
   data->humidity = humidity;
   data->temperature = temperature;
 }
@@ -266,12 +305,12 @@ void messageReceived(char* topic, byte* payload, unsigned int length) {
 void sendData(Data data) {
   if (mqttClient.connected()) {
     String message = "{\"rssi\":" + String(data.rssi)
-	+ ",\"humidity\":" + String(data.humidity)
-	+ ",\"temperature\":" + String(data.temperature)
+  + ",\"humidity\":" + String(data.humidity)
+  + ",\"temperature\":" + String(data.temperature)
 #ifdef USE_BATTERY_VOLTAGE
-	+ ",\"batteryvoltage\":" + String(data.batteryVoltage)
+  + ",\"batteryvoltage\":" + String(data.batteryVoltage)
 #endif
-	+ "}";
+  + "}";
     Serial.println("Sending: " + message);
 
     mqttClient.publish("/Tinamous/V1/Measurements/Json", message.c_str());
