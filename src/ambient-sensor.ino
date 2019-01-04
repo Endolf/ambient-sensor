@@ -14,8 +14,8 @@
 #else
   #include <DHT.h>
 #endif
+
 #include <PubSubClient.h>
-#include <stdlib.h>
 
 #include "arduino_secrets.h"
 
