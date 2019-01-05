@@ -1,4 +1,4 @@
-arduino_secrets.h
+*_secrets.h
 .pioenvs/
 .piolibdeps/
 .idea/

@@ -17,7 +17,7 @@
 
 #include <PubSubClient.h>
 
-#include "arduino_secrets.h"
+#include DEVICE_SECRETS_H
 
 // what pin we're connected to
 #define DHTPIN 23
@@ -42,10 +42,10 @@ const int dataSendFrequency = 1000 * 60 * 10, sampleFrequency=10000;
 const float dataSmoothingRatio = 0.7;
 
 struct Data {
-  float humidity;
-  float temperature;
-  float batteryVoltage;
-  float rssi;
+  float humidity=0;
+  float temperature=0;
+  float batteryVoltage=0;
+  float rssi=0;
 } data,smoothedData;
 
 unsigned long nextSampleTime = 0L, lastDataSent = 0L, nextSendTime = dataSendFrequency;
@@ -261,7 +261,7 @@ void checkAndConnectToWifi() {
     Serial.println(mqttClient.state());
     Serial.println("Connecting to mqtt");
     mqttClient.disconnect();
-    if (!mqttClient.connect(deviceId.c_str(), mqttUser, mqttPass)) {
+    if (!mqttClient.connect(deviceId, mqttUser, mqttPass)) {
       Serial.print("Failed to connect: ");
       Serial.println(mqttClient.state());
     }
@@ -274,7 +274,9 @@ void sampleBatteryVoltage(Data* data) {
   int sensorValue = analogRead(ADC_BATTERY);
   // Convert the analog reading (which goes from 0 - 1023) to a voltage (0 - 4.3V):
   float voltage = sensorValue * (4.3 / 1023.0);
-  data->batteryVoltage = voltage;
+  if(!isnan(voltage)) {
+    data->batteryVoltage = voltage;
+  }
 #endif
 }
 
@@ -286,8 +288,12 @@ void sampleTempAndHumdity(Data* data) {
   float humidity = dht.readHumidity();
   float temperature = dht.readTemperature();
 #endif
-  data->humidity = humidity;
-  data->temperature = temperature;
+  if(!isnan(humidity)) {
+    data->humidity = humidity;
+  }
+  if(!isnan(temperature)) {
+    data->temperature = temperature;
+  }
 }
 
 void messageReceived(char* topic, byte* payload, unsigned int length) {
