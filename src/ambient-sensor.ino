@@ -19,8 +19,6 @@
 
 #include DEVICE_SECRETS_H
 
-// what pin we're connected to
-#define DHTPIN 23
 #ifdef USE_ESP32_DHT
   DHTesp dht;
 #else
