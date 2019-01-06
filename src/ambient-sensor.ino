@@ -104,7 +104,8 @@ void loop() {
     Serial.print(currentLoopTime);
     Serial.print(" in ");
     Serial.print(millis() - currentLoopTime);
-    Serial.println("ms");
+    Serial.print("ms, next sample millis: ");
+    Serial.println(nextSampleTime);
   }
   if (currentLoopTime >= nextSendTime) {
     checkAndConnectToWifi();
@@ -118,7 +119,8 @@ void loop() {
     Serial.print(currentLoopTime);
     Serial.print(" in ");
     Serial.print(millis() - currentLoopTime);
-    Serial.println("ms");
+    Serial.print("ms, next send millis: ");
+    Serial.println(nextSendTime);
   }
   mqttClient.loop();
   if (((millis() - lastDataSent) > 10000) && (WiFi.status() == WL_CONNECTED)) {
@@ -127,7 +129,7 @@ void loop() {
     WiFi.end();
 #else
     WiFi.disconnect(true);
-    WiFi.mode(WIFI_OFF);
+//    WiFi.mode(WIFI_OFF);
 #endif
     Serial.println(WiFi.status());
 #ifdef USE_BUILT_IN_LED
