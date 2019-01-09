@@ -73,6 +73,12 @@ void setup() {
 void loop() {
   unsigned long currentLoopTime = millis();
 
+  if(currentLoopTime>4290000 || currentLoopTime < 0 || (currentLoopTime+sampleFrequency) < nextSampleTime) {
+    Serial.print("In loop: ");
+    Serial.println(millis());
+    delay(1000);
+  }
+
 #ifdef USE_BUILT_IN_LED
   digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED));
 #endif
