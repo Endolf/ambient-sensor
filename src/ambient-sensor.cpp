@@ -1,5 +1,7 @@
 #define MQTT_KEEPALIVE 5
 
+#include <Arduino.h>
+
 #ifdef USE_WIFI_NINA
   #include <WiFiNINA.h>
 #else
@@ -48,100 +50,11 @@ struct Data {
 
 unsigned long nextSampleTime = 0L, lastDataSent = 0L, nextSendTime = dataSendFrequency;
 
-void setup() {
-
-#ifdef USE_BUILT_IN_LED
-  pinMode(LED_BUILTIN, OUTPUT);
-#endif
-
-  Serial.begin(115200);
-
-#ifdef USE_RTCZero
-  rtc.begin();
-#endif
-#ifdef USE_ESP32_DHT
-  dht.setup(DHTPIN, DHTesp::DHT22);
-#else
-  dht.begin();
-#endif
-
-  mqttClient.setServer("computerbooth.tinamous.com", 8883);
-  mqttClient.setCallback(messageReceived);
-
-}
-
-void loop() {
-  unsigned long currentLoopTime = millis();
-
-  if(currentLoopTime>4290000 || currentLoopTime < 0 || (currentLoopTime+sampleFrequency) < nextSampleTime) {
-    Serial.print("In loop: ");
-    Serial.println(millis());
-    delay(1000);
+void print2digits(int number) {
+  if (number < 10) {
+    Serial.print("0");
   }
-
-#ifdef USE_BUILT_IN_LED
-  digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED));
-#endif
-  if (currentLoopTime >= nextSampleTime) {
-    printDate();
-    printTime();
-#ifdef USE_BUILT_IN_LED
-    digitalWrite(LED_BUILTIN, true);
-#endif
-    sampleBatteryVoltage(&data);
-    sampleTempAndHumdity(&data);
-
-    if(WiFi.status()==WL_CONNECTED) {
-      data.rssi = WiFi.RSSI();
-    }
-
-    smoothedData.rssi = smoothedData.rssi==0?data.rssi:(data.rssi * dataSmoothingRatio) + (smoothedData.rssi * (1-dataSmoothingRatio));
-    smoothedData.humidity = smoothedData.humidity==0?data.humidity:(data.humidity * dataSmoothingRatio) + (smoothedData.humidity * (1-dataSmoothingRatio));
-    smoothedData.temperature = smoothedData.temperature==0?data.temperature:(data.temperature * dataSmoothingRatio) + (smoothedData.temperature * (1-dataSmoothingRatio));
-    smoothedData.batteryVoltage = smoothedData.batteryVoltage==0?data.batteryVoltage:(data.batteryVoltage * dataSmoothingRatio) + (smoothedData.batteryVoltage * (1-dataSmoothingRatio));
-#ifdef USE_BUILT_IN_LED
-    digitalWrite(LED_BUILTIN, WiFi.status()==WL_CONNECTED);
-#endif
-    Serial.println("data: {\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"batteryvoltage\":" + String(data.batteryVoltage) + "}");
-    Serial.println("smoothedData: {\"rssi\":" + String(smoothedData.rssi) + ",\"humidity\":" + String(smoothedData.humidity) + ",\"temperature\":" + String(smoothedData.temperature) + ",\"batteryvoltage\":" + String(smoothedData.batteryVoltage) + "}");
-
-    while(nextSampleTime<=currentLoopTime) nextSampleTime+=sampleFrequency;
-    Serial.print("Sample loop ran at ");
-    Serial.print(currentLoopTime);
-    Serial.print(" in ");
-    Serial.print(millis() - currentLoopTime);
-    Serial.print("ms, next sample millis: ");
-    Serial.println(nextSampleTime);
-  }
-  if (currentLoopTime >= nextSendTime) {
-    checkAndConnectToWifi();
-    if(smoothedData.rssi==0) {
-      //Force override of RSSI data
-      smoothedData.rssi = WiFi.RSSI();
-    }
-    sendData(smoothedData);
-    while(nextSendTime<=currentLoopTime) nextSendTime+=dataSendFrequency;
-    Serial.print("Data loop ran at ");
-    Serial.print(currentLoopTime);
-    Serial.print(" in ");
-    Serial.print(millis() - currentLoopTime);
-    Serial.print("ms, next send millis: ");
-    Serial.println(nextSendTime);
-  }
-  mqttClient.loop();
-  if (((millis() - lastDataSent) > 10000) && (WiFi.status() == WL_CONNECTED)) {
-    Serial.print("Turning off WiFi: ");
-#ifdef USE_WIFI_NINA
-    WiFi.end();
-#else
-    WiFi.disconnect(true);
-//    WiFi.mode(WIFI_OFF);
-#endif
-    Serial.println(WiFi.status());
-#ifdef USE_BUILT_IN_LED
-    digitalWrite(LED_BUILTIN, false);
-#endif
-  }
+  Serial.print(number);
 }
 
 void printTime()
@@ -191,13 +104,6 @@ void printWiFiStatus() {
   Serial.print("signal strength (RSSI):");
   Serial.print(rssi);
   Serial.println(" dBm");
-}
-
-void print2digits(int number) {
-  if (number < 10) {
-    Serial.print("0");
-  }
-  Serial.print(number);
 }
 
 void checkAndConnectToWifi() {
@@ -331,5 +237,101 @@ void sendData(Data data) {
     lastDataSent = millis();
   } else {
     Serial.println("MQTT not connected, not sending data");
+  }
+}
+
+void setup() {
+
+#ifdef USE_BUILT_IN_LED
+  pinMode(LED_BUILTIN, OUTPUT);
+#endif
+
+  Serial.begin(115200);
+
+#ifdef USE_RTCZero
+  rtc.begin();
+#endif
+#ifdef USE_ESP32_DHT
+  dht.setup(DHTPIN, DHTesp::DHT22);
+#else
+  dht.begin();
+#endif
+
+  mqttClient.setServer("computerbooth.tinamous.com", 8883);
+  mqttClient.setCallback(messageReceived);
+
+}
+
+void loop() {
+  unsigned long currentLoopTime = millis();
+
+  if(currentLoopTime>4290000 || currentLoopTime < 0 || (currentLoopTime+sampleFrequency) < nextSampleTime) {
+    Serial.print("In loop: ");
+    Serial.println(millis());
+    delay(1000);
+  }
+
+#ifdef USE_BUILT_IN_LED
+  digitalWrite(LED_BUILTIN, (WiFi.status() == WL_CONNECTED));
+#endif
+  if (currentLoopTime >= nextSampleTime) {
+    printDate();
+    printTime();
+#ifdef USE_BUILT_IN_LED
+    digitalWrite(LED_BUILTIN, true);
+#endif
+    sampleBatteryVoltage(&data);
+    sampleTempAndHumdity(&data);
+
+    if(WiFi.status()==WL_CONNECTED) {
+      data.rssi = WiFi.RSSI();
+    }
+
+    smoothedData.rssi = smoothedData.rssi==0?data.rssi:(data.rssi * dataSmoothingRatio) + (smoothedData.rssi * (1-dataSmoothingRatio));
+    smoothedData.humidity = smoothedData.humidity==0?data.humidity:(data.humidity * dataSmoothingRatio) + (smoothedData.humidity * (1-dataSmoothingRatio));
+    smoothedData.temperature = smoothedData.temperature==0?data.temperature:(data.temperature * dataSmoothingRatio) + (smoothedData.temperature * (1-dataSmoothingRatio));
+    smoothedData.batteryVoltage = smoothedData.batteryVoltage==0?data.batteryVoltage:(data.batteryVoltage * dataSmoothingRatio) + (smoothedData.batteryVoltage * (1-dataSmoothingRatio));
+#ifdef USE_BUILT_IN_LED
+    digitalWrite(LED_BUILTIN, WiFi.status()==WL_CONNECTED);
+#endif
+    Serial.println("data: {\"rssi\":" + String(data.rssi) + ",\"humidity\":" + String(data.humidity) + ",\"temperature\":" + String(data.temperature) + ",\"batteryvoltage\":" + String(data.batteryVoltage) + "}");
+    Serial.println("smoothedData: {\"rssi\":" + String(smoothedData.rssi) + ",\"humidity\":" + String(smoothedData.humidity) + ",\"temperature\":" + String(smoothedData.temperature) + ",\"batteryvoltage\":" + String(smoothedData.batteryVoltage) + "}");
+
+    while(nextSampleTime<=currentLoopTime) nextSampleTime+=sampleFrequency;
+    Serial.print("Sample loop ran at ");
+    Serial.print(currentLoopTime);
+    Serial.print(" in ");
+    Serial.print(millis() - currentLoopTime);
+    Serial.print("ms, next sample millis: ");
+    Serial.println(nextSampleTime);
+  }
+  if (currentLoopTime >= nextSendTime) {
+    checkAndConnectToWifi();
+    if(smoothedData.rssi==0) {
+      //Force override of RSSI data
+      smoothedData.rssi = WiFi.RSSI();
+    }
+    sendData(smoothedData);
+    while(nextSendTime<=currentLoopTime) nextSendTime+=dataSendFrequency;
+    Serial.print("Data loop ran at ");
+    Serial.print(currentLoopTime);
+    Serial.print(" in ");
+    Serial.print(millis() - currentLoopTime);
+    Serial.print("ms, next send millis: ");
+    Serial.println(nextSendTime);
+  }
+  mqttClient.loop();
+  if (((millis() - lastDataSent) > 10000) && (WiFi.status() == WL_CONNECTED)) {
+    Serial.print("Turning off WiFi: ");
+#ifdef USE_WIFI_NINA
+    WiFi.end();
+#else
+    WiFi.disconnect(true);
+    WiFi.mode(WIFI_OFF);
+#endif
+    Serial.println(WiFi.status());
+#ifdef USE_BUILT_IN_LED
+    digitalWrite(LED_BUILTIN, false);
+#endif
   }
 }
