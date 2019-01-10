@@ -48,7 +48,7 @@ struct Data {
   float rssi=0;
 } data,smoothedData;
 
-unsigned long nextSampleTime = 0L, lastDataSent = 0L, nextSendTime = dataSendFrequency;
+unsigned long nextSampleTime = 0L, lastDataSent = 0L, lastLoopTime = 0L, nextSendTime = dataSendFrequency;
 
 void print2digits(int number) {
   if (number < 10) {
@@ -265,10 +265,13 @@ void setup() {
 void loop() {
   unsigned long currentLoopTime = millis();
 
-  if(currentLoopTime>4290000 || currentLoopTime < 0 || (currentLoopTime+sampleFrequency) < nextSampleTime) {
-    Serial.print("In loop: ");
-    Serial.println(millis());
-    delay(1000);
+  if(currentLoopTime<lastLoopTime) {
+    //Handle millis overflow;
+    Serial.println("millis() overflow detected, lastLoopTime: " + String(lastLoopTime) + ", currentLoopTime: " + String(currentLoopTime));
+    Serial.println("original values, nextSampleTime: " + String(nextSampleTime) + ", nextSendTime: " + String(nextSendTime));
+    nextSampleTime = currentLoopTime;
+    nextSendTime = currentLoopTime + dataSendFrequency;
+    Serial.println("updated values, nextSampleTime: " + String(nextSampleTime) + ", nextSendTime: " + String(nextSendTime));
   }
 
 #ifdef USE_BUILT_IN_LED
@@ -322,6 +325,9 @@ void loop() {
   }
   mqttClient.loop();
   if (((millis() - lastDataSent) > 10000) && (WiFi.status() == WL_CONNECTED)) {
+    if(mqttClient.connected()) {
+      mqttClient.disconnect();
+    }
     Serial.print("Turning off WiFi: ");
 #ifdef USE_WIFI_NINA
     WiFi.end();
@@ -334,4 +340,6 @@ void loop() {
     digitalWrite(LED_BUILTIN, false);
 #endif
   }
+
+  lastLoopTime = currentLoopTime;
 }
