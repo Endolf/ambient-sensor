@@ -365,7 +365,7 @@ void loop()
         WiFi.end();
 #else
         WiFi.disconnect(true);
-        WiFi.mode(WIFI_OFF);
+//        WiFi.mode(WIFI_OFF);
 #endif
         Serial.println(WiFi.status());
 #ifdef USE_BUILT_IN_LED
