@@ -354,6 +354,7 @@ void loop()
         Serial.println(nextSendTime);
     }
     mqttClient.loop();
+#ifdef USE_WIFI_NINA
     if (((millis() - lastDataSent) > 10000) && (WiFi.status() == WL_CONNECTED))
     {
         if (mqttClient.connected())
@@ -361,17 +362,12 @@ void loop()
             mqttClient.disconnect();
         }
         Serial.print("Turning off WiFi: ");
-#ifdef USE_WIFI_NINA
         WiFi.end();
-#else
-        WiFi.disconnect(true);
-//        WiFi.mode(WIFI_OFF);
-#endif
         Serial.println(WiFi.status());
 #ifdef USE_BUILT_IN_LED
         digitalWrite(LED_BUILTIN, false);
 #endif
     }
-
+#endif
     lastLoopTime = currentLoopTime;
 }
