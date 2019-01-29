@@ -282,6 +282,8 @@ void setup()
 
     mqttClient.setServer("computerbooth.tinamous.com", 8883);
     mqttClient.setCallback(messageReceived);
+
+    checkAndConnectToWifi();
 }
 
 void loop()
