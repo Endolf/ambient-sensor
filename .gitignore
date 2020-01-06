@@ -1,6 +1,7 @@
 *_secrets.h
 .pioenvs/
 .piolibdeps/
+.pio/
 .idea/
 /*.iml
 .vscode/
